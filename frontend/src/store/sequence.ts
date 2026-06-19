@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Sequence, AlignmentResult, GCContent, PhyloNode } from '../types';
+import type { Sequence, AlignmentResult, GCContent, PhyloNode, TimelineEntry, TimelineActionType } from '../types';
 import {
   needlemanWunsch,
   smithWaterman,
@@ -18,6 +18,7 @@ export const useSequenceStore = defineStore('sequence', () => {
   const phyloTree = ref<PhyloNode | null>(null);
   const selectedSeq1 = ref<string>('');
   const selectedSeq2 = ref<string>('');
+  const timeline = ref<TimelineEntry[]>([]);
 
   const alignmentIdentity = computed(() => {
     return alignmentResult.value ? alignmentResult.value.identity : 0;
@@ -27,17 +28,54 @@ export const useSequenceStore = defineStore('sequence', () => {
     return alignmentResult.value ? alignmentResult.value.score : 0;
   });
 
+  function addTimelineEntry(
+    actionType: TimelineActionType,
+    title: string,
+    description: string,
+    details?: Record<string, string | number>
+  ) {
+    const entry: TimelineEntry = {
+      id: 'tl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+      timestamp: Date.now(),
+      actionType,
+      title,
+      description,
+      details
+    };
+    timeline.value.unshift(entry);
+  }
+
+  function clearTimeline() {
+    timeline.value = [];
+  }
+
   function addSequence(id: string, name: string, data: string) {
+    const cleanData = data.toUpperCase().replace(/[^ACGT]/g, '');
     sequences.value.push({
       id,
       name,
-      data: data.toUpperCase().replace(/[^ACGT]/g, ''),
-      length: data.length
+      data: cleanData,
+      length: cleanData.length
     });
+    addTimelineEntry(
+      'add_sequence',
+      '添加序列',
+      `新增序列「${name}」，长度 ${cleanData.length} bp`,
+      { id, name, length: cleanData.length }
+    );
   }
 
   function removeSequence(id: string) {
+    const seq = sequences.value.find(s => s.id === id);
     sequences.value = sequences.value.filter(s => s.id !== id);
+    if (seq) {
+      addTimelineEntry(
+        'remove_sequence',
+        '删除序列',
+        `移除序列「${seq.name}」`,
+        { id, name: seq.name }
+      );
+    }
   }
 
   function runAlignment(seq1Id: string, seq2Id: string, algorithm: 'nw' | 'sw') {
@@ -48,11 +86,28 @@ export const useSequenceStore = defineStore('sequence', () => {
 
     currentAlgorithm.value = algorithm;
 
+    let result: AlignmentResult;
     if (algorithm === 'nw') {
-      alignmentResult.value = needlemanWunsch(s1.data, s2.data);
+      result = needlemanWunsch(s1.data, s2.data);
     } else {
-      alignmentResult.value = smithWaterman(s1.data, s2.data);
+      result = smithWaterman(s1.data, s2.data);
     }
+    alignmentResult.value = result;
+
+    const algoName = algorithm === 'nw' ? 'Needleman-Wunsch (全局)' : 'Smith-Waterman (局部)';
+    addTimelineEntry(
+      'run_alignment',
+      '序列比对',
+      `使用 ${algoName} 比对「${s1.name}」与「${s2.name}」，相似度 ${result.identity.toFixed(1)}%，得分 ${result.score}`,
+      {
+        seq1: s1.name,
+        seq2: s2.name,
+        algorithm: algoName,
+        identity: result.identity.toFixed(1) + '%',
+        score: result.score,
+        gaps: result.gaps
+      }
+    );
   }
 
   function loadMockSequences() {
@@ -62,6 +117,13 @@ export const useSequenceStore = defineStore('sequence', () => {
     }
     selectedSeq1.value = MOCK_SEQUENCES[0].id;
     selectedSeq2.value = MOCK_SEQUENCES[1].id;
+    clearTimeline();
+    addTimelineEntry(
+      'load_mock',
+      '加载示例序列',
+      `加载了 ${MOCK_SEQUENCES.length} 条示例序列：${MOCK_SEQUENCES.map(s => s.name).join('、')}`,
+      { count: MOCK_SEQUENCES.length }
+    );
   }
 
   function buildTree() {
@@ -71,12 +133,30 @@ export const useSequenceStore = defineStore('sequence', () => {
     const distMatrix = calculateDistanceMatrix(seqData);
     const names = sequences.value.map(s => s.name);
     phyloTree.value = buildNJTree(distMatrix, names);
+
+    addTimelineEntry(
+      'build_tree',
+      '构建进化树',
+      `基于 ${names.length} 条序列构建 Neighbor-Joining 系统发育树`,
+      { sequenceCount: names.length, sequences: names.join(', ') }
+    );
   }
 
   function analyzeGC(seqId: string, windowSize: number) {
     const seq = sequences.value.find(s => s.id === seqId);
     if (!seq) return;
-    gcData.value = calculateGCContent(seq.data, windowSize);
+    const data = calculateGCContent(seq.data, windowSize);
+    gcData.value = data;
+
+    const avgGC = data.length > 0
+      ? (data.reduce((sum, d) => sum + d.gc, 0) / data.length).toFixed(1)
+      : '0';
+    addTimelineEntry(
+      'analyze_gc',
+      'GC含量分析',
+      `分析「${seq.name}」的 GC 含量，窗口大小 ${windowSize} bp，平均 GC 含量 ${avgGC}%`,
+      { sequence: seq.name, windowSize, avgGC: avgGC + '%' }
+    );
   }
 
   return {
@@ -87,6 +167,7 @@ export const useSequenceStore = defineStore('sequence', () => {
     phyloTree,
     selectedSeq1,
     selectedSeq2,
+    timeline,
     alignmentIdentity,
     alignmentScore,
     addSequence,
@@ -94,6 +175,7 @@ export const useSequenceStore = defineStore('sequence', () => {
     runAlignment,
     loadMockSequences,
     buildTree,
-    analyzeGC
+    analyzeGC,
+    clearTimeline
   };
 });

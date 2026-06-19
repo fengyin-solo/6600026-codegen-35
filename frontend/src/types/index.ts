@@ -29,3 +29,20 @@ export interface GCContent {
   position: number;
   gc: number;
 }
+
+export type TimelineActionType =
+  | 'load_mock'
+  | 'add_sequence'
+  | 'remove_sequence'
+  | 'run_alignment'
+  | 'analyze_gc'
+  | 'build_tree';
+
+export interface TimelineEntry {
+  id: string;
+  timestamp: number;
+  actionType: TimelineActionType;
+  title: string;
+  description: string;
+  details?: Record<string, string | number>;
+}

@@ -4,6 +4,7 @@ import { useSequenceStore } from './store/sequence';
 import AlignmentView from './components/AlignmentView.vue';
 import PhyloTree from './components/PhyloTree.vue';
 import GCChart from './components/GCChart.vue';
+import TimelineView from './components/TimelineView.vue';
 
 const store = useSequenceStore();
 const gcSeqId = ref('');
@@ -264,6 +265,26 @@ function handleLoadMock() {
         </div>
         <div class="p-4">
           <PhyloTree :tree="store.phyloTree" />
+        </div>
+      </section>
+
+      <!-- Timeline Section -->
+      <section class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div class="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-gray-300">分析时间线</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500">{{ store.timeline.length }} 条记录</span>
+            <button
+              v-if="store.timeline.length > 0"
+              @click="store.clearTimeline()"
+              class="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              清空
+            </button>
+          </div>
+        </div>
+        <div class="p-4">
+          <TimelineView :entries="store.timeline" />
         </div>
       </section>
     </div>
